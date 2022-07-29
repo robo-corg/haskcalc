@@ -2,99 +2,65 @@ module Parse where
 
 import Expr
 import Data.Char
+import Text.Parsec
+import Text.Parsec.String (Parser)
+import Text.Parsec.Char (oneOf, char, digit, satisfy)
+import Text.Parsec.Combinator (many1, choice, chainl1)
+import Text.Parsec.Expr
+import Control.Monad (void)
+import Text.Parsec.Token
 
+-- Non-token based parser which seems to work:
+-- whitespace :: Parser ()
+-- whitespace = void $ many $ oneOf " \n\t"
 
-data Parsed a = Parsed a [Token]
-type ParseResult a = Either ParseError (Parsed a)
+-- lexeme :: Parser a -> Parser a
+-- lexeme p = do
+--            x <- p
+--            whitespace
+--            return x
 
-instance Functor Parsed where
-    fmap f (Parsed a tokens) = Parsed (f a) tokens
+-- integer :: Parser Integer
+-- integer = read <$> lexeme (many1 digit)
 
+-- intExpr :: Parser Expr
+-- --intExpr = Num `fmap` integer
+-- intExpr = do
+--     a <- integer
+--     return (Num a)
 
-type Parser a = [Token] -> Parsed a
-
-p2 :: Parser a -> Parser b -> (a -> b -> c) -> Parser c
-p2 pa pb f tokens =
-    let (Parsed a a_remain) = (pa tokens) in
-        let (Parsed b b_remain) = (pb a_remain) in
-            Parsed (f a b) b_remain
-
-p :: Parser a  -> (a -> c) -> Parser c
-p pa f tokens =
-    let (Parsed a a_remain) = (pa tokens) in
-        Parsed (f a) a_remain
-
-ap :: [Token] -> Parsed Expr
-ap tokens = Parsed (Num 42) tokens
-
-
-combined :: [Token] -> Parsed Expr
-combined = p ap id
-
-
--- instance Applicative Parser where
---   pure a = Parsed a []
---   (<*>) = _
+-- term :: Parser Expr
+-- term    = intExpr <?> "simple expression"
 
 
 
-data Token = NumTok Int | BinOpTok BinOp
+-- Text.Parsec.Token based approach:
 
-tokenizeNum :: String -> String -> (String, Token)
-tokenizeNum digits (ch:rest)
-    | isDigit ch = tokenizeNum (digits ++ [ch]) rest
-    | otherwise = ([ch], NumTok $ read digits)
-tokenizeNum digits [] = ([], NumTok $ read digits)
+-- expr :: Parser Expr
+-- expr    = buildExpressionParser table term
+--         <?> "expression"
 
-tokenize :: String -> [Token]
-tokenize [] = []
-tokenize (' ':rest) = tokenize rest
-tokenize ('+':rest) = (BinOpTok Add) : tokenize rest
-tokenize ('-':rest) = (BinOpTok Sub) : tokenize rest
-tokenize ('*':rest) = (BinOpTok Mul) : tokenize rest
-tokenize (ch:rest)
-    | isDigit ch = let (unused, tok) = tokenizeNum [ch] rest in
-        tok : tokenize (unused ++ rest)
+-- parseExpr :: String -> ParseError
+-- parseExpr s = parse "" s
 
-data ParseError = UnknownParseError
-    deriving (Eq, Show)
+-- term    =  parens expr
+--         <|> Num <$> integer
+--         <?> "simple expression"
+
+term    =  Num <$> integer
+        <?> "simple expression"
 
 
+-- table :: [[Operator String u m Expr]]
+-- table   = [ [prefix "-" negate, prefix "+" id ]
+--         , [postfix "++" (+1)]
+--         , [binary "*" (*) AssocLeft, binary "/" (div) AssocLeft ]
+--         , [binary "+" (+) AssocLeft, binary "-" (-)   AssocLeft ]
+--         ]
 
-negateExpr :: Expr -> Expr
-negateExpr (Num a) = Num (-a)
-negateExpr expr = UnaryOp Negate expr
+--binary :: GenTokenParser s1 u1 m1 -> (a -> a -> a) -> Assoc -> Operator s2 u2 m2 a
+-- binary  name fun assoc = Infix (do{ reservedOp name; return fun }) assoc
+-- --prefix :: GenTokenParser s1 u1 m1 -> (a -> a) -> Operator s2 u2 m2 a
+-- prefix  name fun       = Prefix (do{ reservedOp name; return fun })
+-- postfix name fun       = Postfix (do{ reservedOp name; return fun })
 
-parseExprTok :: [Token] -> Either ParseError Expr
-
-pmap :: (Expr -> Expr) -> ParseResult Expr -> ParseResult Expr
-pmap _ (Left err) = Left err
-pmap f (Right (Parsed expr remaining)) = Right $ Parsed (f expr) remaining
-
-parseAnyTok :: [Token] -> [Token] -> ParseResult Token
-parseAnyTok allowed_tokens (tok:tokens) = if elem tok allowed_tokens then
-    Right $ Parsed tok tokens
-    else
-    Left UnknownParseError
-parseAnyTok _ [] = Left UnknownParseError
-
-parseExprTermsTok :: [Token] -> ParseResult Expr
-parseExprTermsTok s = (parseTermTok s) <*> (parseAnyTok [BinOpTok Add, BinOpTok Sub])
---parseExprTermsTok s = (parseTermTok s) <*> (parseAnyTok [BinOpTok Add, BinOpTok Sub])
-
-
--- parseExprTermsTok s = case parseTermTok s of
---     Right (term, remaining) -> Right (case remaining of
---             ((BinOpTok Add):remaining) -> pmap (BinOp Add term) (parseExprTermsTok remaining)
---         )
---     Left err -> Left err
-
-parseExprTok ((BinOpTok Sub):rest) = fmap negateExpr (parseExprTok rest)
-parseExprTok ((NumTok lhs):(BinOpTok op):rest) =
-    fmap (BinOp op (Num lhs)) (parseExprTok rest)
-
-parseTermTok :: [Token] -> ParseResult Expr
-parseTermTok [NumTok n] = Right (Num n)
-
-parseExpr :: String -> Either ParseError Expr
-parseExpr s = parseExprTok $ tokenize s

@@ -7,7 +7,7 @@ data UnaryOp = Negate
     deriving (Eq, Show)
 
 data Expr =
-    Num Int | BinOp BinOp Expr Expr | UnaryOp UnaryOp Expr
+    Num Integer | BinOp BinOp Expr Expr | UnaryOp UnaryOp Expr
     deriving (Eq, Show)
 
 -- instance Eq Expr where
@@ -21,7 +21,7 @@ binOpFun Add = (+)
 binOpFun Sub = (-)
 binOpFun Mul = (*)
 
-eval :: Expr -> Int
+eval :: Expr -> Integer
 eval (Num n) = n
 eval (BinOp op lhs rhs) = binOpFun op (eval lhs) (eval rhs)
 eval (UnaryOp Negate expr) = - (eval expr)

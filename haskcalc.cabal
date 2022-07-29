@@ -26,7 +26,8 @@ library
       src
   ghc-options: -Wall
   build-depends:
-      base ==4.*
+      base ==4.*,
+      parsec ==3.*
   exposed-modules:
       Expr
       Parse
