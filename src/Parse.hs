@@ -7,60 +7,34 @@ import Text.Parsec.String (Parser)
 import Text.Parsec.Char (oneOf, char, digit, satisfy)
 import Text.Parsec.Combinator (many1, choice, chainl1)
 import Text.Parsec.Expr
+import qualified Text.Parsec.Token as P
+import Text.Parsec.Language (haskellDef)
 import Control.Monad (void)
-import Text.Parsec.Token
-
--- Non-token based parser which seems to work:
--- whitespace :: Parser ()
--- whitespace = void $ many $ oneOf " \n\t"
-
--- lexeme :: Parser a -> Parser a
--- lexeme p = do
---            x <- p
---            whitespace
---            return x
-
--- integer :: Parser Integer
--- integer = read <$> lexeme (many1 digit)
-
--- intExpr :: Parser Expr
--- --intExpr = Num `fmap` integer
--- intExpr = do
---     a <- integer
---     return (Num a)
-
--- term :: Parser Expr
--- term    = intExpr <?> "simple expression"
 
 
+lexer       = P.makeTokenParser haskellDef
+parens      = P.parens lexer
+integer     = P.integer lexer
 
--- Text.Parsec.Token based approach:
+reservedOp = P.reservedOp lexer
 
--- expr :: Parser Expr
--- expr    = buildExpressionParser table term
---         <?> "expression"
+expr :: Parser Expr
+expr    = buildExpressionParser table term
+        <?> "expression"
 
--- parseExpr :: String -> ParseError
--- parseExpr s = parse "" s
-
--- term    =  parens expr
---         <|> Num <$> integer
---         <?> "simple expression"
-
-term    =  Num <$> integer
+term :: Parser Expr
+term    =  parens expr
+        <|> Num <$> integer
         <?> "simple expression"
 
+table   = [ [prefix "-" negate, prefix "+" id ]
+        , [postfix "++" (+1)]
+        , [binary "*" (*) AssocLeft] --, binary "/" (div) AssocLeft ]
+        , [binary "+" (+) AssocLeft, binary "-" (-)   AssocLeft ]
+        ]
 
--- table :: [[Operator String u m Expr]]
--- table   = [ [prefix "-" negate, prefix "+" id ]
---         , [postfix "++" (+1)]
---         , [binary "*" (*) AssocLeft, binary "/" (div) AssocLeft ]
---         , [binary "+" (+) AssocLeft, binary "-" (-)   AssocLeft ]
---         ]
+binary  name fun assoc = Infix (do{ reservedOp name; return fun }) assoc
+prefix  name fun       = Prefix (do{ reservedOp name; return fun })
+postfix name fun       = Postfix (do{ reservedOp name; return fun })
 
---binary :: GenTokenParser s1 u1 m1 -> (a -> a -> a) -> Assoc -> Operator s2 u2 m2 a
--- binary  name fun assoc = Infix (do{ reservedOp name; return fun }) assoc
--- --prefix :: GenTokenParser s1 u1 m1 -> (a -> a) -> Operator s2 u2 m2 a
--- prefix  name fun       = Prefix (do{ reservedOp name; return fun })
--- postfix name fun       = Postfix (do{ reservedOp name; return fun })
-
+parseExpr s = parse expr "" s
